@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#10292b">
+    <meta name="description" content="Inspect HAR network captures in your browser. Private files stay on your device.">
+    <title>HarFlow Studio — Private network performance analysis</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="module" src="./src/app.js"></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to dashboard</a>
+    <header class="site-header">
+      <div class="shell header-inner">
+        <a class="brand" href="#top" aria-label="HarFlow Studio home">
+          <span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span>HARFLOW <small>STUDIO</small></span>
+        </a>
+        <nav aria-label="Main navigation">
+          <a href="#dashboard">Dashboard</a>
+          <a href="#waterfall">Waterfall</a>
+          <a href="#how-it-works">How it works</a>
+        </nav>
+        <a class="header-link" href="https://github.com/brohum10/harflow-studio" target="_blank" rel="noopener noreferrer">View source <span aria-hidden="true">↗</span></a>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="shell hero-grid">
+          <div class="hero-copy">
+            <span class="eyebrow"><span class="signal-dot"></span> LOCAL-FIRST PERFORMANCE LAB</span>
+            <h1>See where your page <em>actually waits.</em></h1>
+            <p class="hero-lede">Turn a browser network capture into a clear request waterfall, transfer breakdown, and a short list of places worth investigating.</p>
+            <div class="hero-points" aria-label="Project highlights">
+              <span><b>01</b> No account</span>
+              <span><b>02</b> No server upload</span>
+              <span><b>03</b> Explainable metrics</span>
+            </div>
+          </div>
+          <div class="import-card" id="import-card" aria-labelledby="import-title">
+            <div class="import-card-top">
+              <span class="card-kicker">START AN ANALYSIS</span>
+              <span class="private-pill"><span aria-hidden="true">●</span> PRIVATE BY DESIGN</span>
+            </div>
+            <h2 id="import-title">Drop in a HAR file.<br>Get the full picture.</h2>
+            <p>Export a HAR from your browser’s Network panel. The file is read in this tab; it is never sent to a server.</p>
+            <input id="har-file" type="file" accept=".har,.json,application/json" class="sr-only">
+            <label class="button button-primary" for="har-file">Choose HAR file <span aria-hidden="true">↗</span></label>
+            <button class="button button-quiet" id="load-demo" type="button">Reload synthetic demo <span aria-hidden="true">→</span></button>
+            <div class="import-note"><span class="small-square" aria-hidden="true"></span> Up to 20 MB / 10,000 requests · URLs are shown without query strings</div>
+          </div>
+        </div>
+      </section>
+
+      <div class="shell page-content" id="dashboard">
+        <div class="section-heading">
+          <div>
+            <span class="overline">THE OVERVIEW</span>
+            <h2>Network, at a glance.</h2>
+          </div>
+          <div class="source-wrap">
+            <span class="source-badge" id="source-badge">Loading demo…</span>
+            <button id="export-summary" class="button button-outline" type="button" disabled>Export summary <span aria-hidden="true">↓</span></button>
+          </div>
+        </div>
+        <p id="status-message" class="status-message" role="status" aria-live="polite">Loading the synthetic example…</p>
+
+        <section class="metric-grid" aria-label="Capture metrics">
+          <article class="metric-card"><span class="metric-index">01 / VOLUME</span><strong id="metric-requests">—</strong><span class="metric-name">Requests</span><small id="note-requests">Captured entries</small></article>
+          <article class="metric-card"><span class="metric-index">02 / WEIGHT</span><strong id="metric-bytes">—</strong><span class="metric-name">Known transfer</span><small id="note-bytes">From recorded wire-size fields</small></article>
+          <article class="metric-card"><span class="metric-index">03 / SPEED</span><strong id="metric-p95">—</strong><span class="metric-name">p95 request duration</span><small id="note-p95">Nearest-rank percentile</small></article>
+          <article class="metric-card"><span class="metric-index">04 / WINDOW</span><strong id="metric-span">—</strong><span class="metric-name">Capture span</span><small id="note-span">First start to last finish</small></article>
+        </section>
+
+        <div class="insight-grid">
+          <section class="panel budget-panel" aria-labelledby="budget-title">
+            <div class="panel-heading"><span class="overline">YOUR THRESHOLDS</span><h3 id="budget-title">Performance budgets</h3><p>Adjust these to fit your own page. A red result is a prompt to investigate, not a diagnosis.</p></div>
+            <div class="budget-inputs">
+              <label>Max requests <input id="budget-requests" type="number" min="1" max="10000" value="80" inputmode="numeric"></label>
+              <label>Max known transfer (MB) <input id="budget-transfer" type="number" min="0.1" max="1000" step="0.1" value="2.0" inputmode="decimal"></label>
+              <label>Max p95 (ms) <input id="budget-p95" type="number" min="1" max="600000" value="500" inputmode="numeric"></label>
+            </div>
+            <div id="budget-results" class="budget-results" aria-live="polite"></div>
+          </section>
+          <section class="panel findings-panel" aria-labelledby="findings-title">
+            <div class="panel-heading"><span class="overline">WHAT STANDS OUT</span><h3 id="findings-title">Investigation queue</h3><p>Heuristic signals from the capture, with no invented root-cause claims.</p></div>
+            <div id="finding-list" class="finding-list"></div>
+          </section>
+        </div>
+
+        <section class="panel waterfall-panel" id="waterfall" aria-labelledby="waterfall-title">
+          <div class="waterfall-header">
+            <div><span class="overline">FOLLOW THE REQUESTS</span><h2 id="waterfall-title">The waterfall</h2><p>Every bar starts when the request began; its width is the recorded duration.</p></div>
+            <div class="legend" aria-label="Resource colors"><span><i class="legend-dot document"></i> Document</span><span><i class="legend-dot script"></i> Script</span><span><i class="legend-dot style"></i> Style</span><span><i class="legend-dot image"></i> Image</span><span><i class="legend-dot data"></i> Data</span><span><i class="legend-dot other"></i> Other</span></div>
+          </div>
+          <div class="filters" aria-label="Filter requests">
+            <label class="filter-search">Search host or path <input id="filter-search" type="search" placeholder="e.g. /api or assets" autocomplete="off"></label>
+            <label>Type <select id="filter-type"><option value="all">All types</option><option value="document">Document</option><option value="script">Script</option><option value="style">Style</option><option value="image">Image</option><option value="font">Font</option><option value="data">Data</option><option value="other">Other</option></select></label>
+            <label>Status <select id="filter-status"><option value="all">All statuses</option><option value="errors">Errors 4xx/5xx</option><option value="success">Success 2xx/3xx</option></select></label>
+            <label>Host <select id="filter-host"><option value="all">All hosts</option></select></label>
+            <label>Sort <select id="sort-by"><option value="start">Start time</option><option value="duration">Longest first</option><option value="transfer">Largest first</option></select></label>
+          </div>
+          <div class="table-head"><span id="visible-count">0 requests</span><span id="timeline-label">Timeline</span></div>
+          <div class="table-scroll">
+            <table class="request-table">
+              <thead><tr><th scope="col">Request</th><th scope="col">Host</th><th scope="col">Status</th><th scope="col">Transfer</th><th scope="col">Duration</th><th scope="col">Timeline</th></tr></thead>
+              <tbody id="request-rows"></tbody>
+            </table>
+          </div>
+          <p class="waterfall-footnote">Timings come from the HAR export. Browser phase fields may be missing or estimated; a waterfall alone cannot prove a critical path.</p>
+        </section>
+
+        <div class="lower-grid">
+          <section class="panel detail-panel" aria-labelledby="detail-title"><span class="overline">SELECTED REQUEST</span><h3 id="detail-title">Request detail</h3><div id="request-detail" class="request-detail"></div></section>
+          <section class="panel host-panel" aria-labelledby="host-title"><span class="overline">TRANSFER DISTRIBUTION</span><h3 id="host-title">By host</h3><p class="panel-subtext">Known transfer only. The first observed host is labeled primary, not necessarily the site's origin.</p><div id="host-breakdown" class="host-breakdown"></div></section>
+        </div>
+      </div>
+
+      <section id="how-it-works" class="explainer">
+        <div class="shell explainer-grid">
+          <div><span class="overline">THE METHOD</span><h2>Useful evidence.<br><em>Honest limits.</em></h2></div>
+          <div class="explainer-steps">
+            <div><b>01</b><span><strong>Read locally</strong><small>Your chosen file stays in browser memory. HarFlow makes no upload request.</small></span></div>
+            <div><b>02</b><span><strong>Normalize carefully</strong><small>Query strings, fragments, credentials, and request/response headers are omitted from the interface and export.</small></span></div>
+            <div><b>03</b><span><strong>Investigate, then verify</strong><small>Budget misses and hints are leads. Confirm changes with repeat captures and lab or field metrics.</small></span></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer"><div class="shell footer-inner"><span>HARFLOW STUDIO <i>·</i> A local-first engineering demo</span><span>Built for clarity, not surveillance.</span></div></footer>
+  </body>
+</html>
