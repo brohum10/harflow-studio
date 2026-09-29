@@ -1,7 +1,7 @@
-import { analyzeHar, evaluateBudgets, formatBytes, formatMs, MAX_HAR_BYTES } from './analyze.js';
+import { analyzeHar, compareAnalyses, evaluateBudgets, formatBytes, formatMs, MAX_HAR_BYTES } from './analyze.js';
 
 const $ = (id) => document.getElementById(id);
-const state = { analysis: null, selectedId: null, source: 'demo' };
+const state = { analysis: null, comparison: null, selectedId: null, source: 'demo' };
 
 function element(tag, className = '', text = '') {
   const node = document.createElement(tag);
@@ -38,6 +38,39 @@ function renderMetrics() {
     : 'All transfers captured in HAR';
   $('note-p95').textContent = 'Nearest-rank percentile';
   $('note-span').textContent = 'First start to last finish';
+}
+
+function comparisonValue(key, value) {
+  if (key === 'knownTransferBytes') return formatBytes(value);
+  if (key === 'p95Ms' || key === 'loadSpanMs') return formatMs(value);
+  return value.toLocaleString();
+}
+
+function renderComparison() {
+  const container = $('comparison-results');
+  container.replaceChildren();
+  if (!state.comparison) {
+    container.append(element('p', 'empty-message', 'Choose a second HAR to see before/after changes, or load the synthetic comparison.'));
+    return;
+  }
+  const comparison = compareAnalyses(state.analysis, state.comparison);
+  for (const row of comparison.rows) {
+    const item = element('div', 'comparison-row');
+    item.append(element('span', 'comparison-label', row.label));
+    item.append(element('span', 'comparison-values', `${comparisonValue(row.key, row.before)} → ${comparisonValue(row.key, row.after)}`));
+    const delta = row.comparable ? row.delta === 0 ? 'No change'
+      : `${row.delta > 0 ? '+' : '−'}${comparisonValue(row.key, Math.abs(row.delta))}${row.percent === null ? '' : ` (${row.percent > 0 ? '+' : ''}${row.percent.toFixed(1)}%)`}`
+      : 'Partial data';
+    item.append(element('strong', `comparison-delta ${!row.comparable ? 'partial' : row.delta > 0 ? 'worse' : row.delta < 0 ? 'better' : ''}`, delta));
+    container.append(item);
+  }
+  const notes = element('p', 'comparison-note');
+  notes.textContent = comparison.samePrimaryHost
+    ? 'These are capture-level changes, not controlled speed measurements. Repeat captures under the same conditions before drawing conclusions.'
+    : 'Primary hosts differ. These captures may not describe the same page; treat every delta as contextual only.';
+  container.append(notes);
+  if (comparison.partialTransfer) container.append(element('p', 'comparison-note',
+    'At least one capture has unknown transfer sizes, so the transfer delta is incomplete.'));
 }
 
 function renderBudgets() {
@@ -226,6 +259,7 @@ function renderDetail() {
 
 function render() {
   renderMetrics();
+  renderComparison();
   renderBudgets();
   renderFindings();
   renderHosts();
@@ -233,16 +267,25 @@ function render() {
   renderRows();
   renderDetail();
   $('export-summary').disabled = false;
-  $('source-badge').textContent = state.source === 'demo' ? 'SYNTHETIC DEMO' : 'PRIVATE CAPTURE';
+  $('source-badge').textContent = state.source === 'demo' ? 'SYNTHETIC BASELINE' : 'PRIVATE BASELINE';
 }
 
 function acceptDocument(document, source) {
   const analysis = analyzeHar(document);
   state.analysis = analysis;
+  state.comparison = null;
   state.selectedId = analysis.requests[0]?.id ?? null;
   state.source = source;
   render();
   status(`${source === 'demo' ? 'Synthetic demo' : 'Private capture'} ready · ${analysis.metrics.requestCount.toLocaleString()} requests analyzed locally.`, 'success');
+}
+
+function acceptCandidate(document, source) {
+  if (!state.analysis) throw new Error('Load a baseline capture first.');
+  const candidate = analyzeHar(document);
+  state.comparison = candidate;
+  renderComparison();
+  status(`${source === 'demo' ? 'Synthetic' : 'Private'} comparison ready · baseline ${state.analysis.metrics.requestCount.toLocaleString()} vs second capture ${candidate.metrics.requestCount.toLocaleString()} requests.`, 'success');
 }
 
 async function loadDemo() {
@@ -267,11 +310,38 @@ async function loadFile(file) {
   }
 }
 
+async function loadComparisonFile(file) {
+  if (!file) return;
+  try {
+    if (file.size > MAX_HAR_BYTES) throw new Error('File exceeds the 20 MB safety limit.');
+    status('Reading the comparison file in this browser tab…');
+    acceptCandidate(JSON.parse(await file.text()), 'private');
+  } catch (error) {
+    status(`Could not compare this file: ${error.message}`, 'error');
+  }
+}
+
+async function loadComparisonDemo() {
+  try {
+    status('Loading synthetic before/after captures…');
+    const [beforeResponse, afterResponse] = await Promise.all([
+      fetch('./examples/sample.har'), fetch('./examples/optimized.har'),
+    ]);
+    if (!beforeResponse.ok || !afterResponse.ok) throw new Error('Demo captures could not be loaded.');
+    const [before, after] = await Promise.all([beforeResponse.json(), afterResponse.json()]);
+    acceptDocument(before, 'demo');
+    acceptCandidate(after, 'demo');
+  } catch (error) {
+    status(`Could not load the comparison demo: ${error.message}`, 'error');
+  }
+}
+
 function exportSummary() {
   if (!state.analysis) return;
   const { metrics, hosts, types, findings } = state.analysis;
   const content = JSON.stringify({ metrics, hosts, types, findings,
-    budgets: evaluateBudgets(metrics, currentBudgets()) }, null, 2);
+    budgets: evaluateBudgets(metrics, currentBudgets()),
+    comparison: state.comparison ? compareAnalyses(state.analysis, state.comparison) : null }, null, 2);
   const url = URL.createObjectURL(new Blob([content + '\n'], { type: 'application/json' }));
   const link = document.createElement('a');
   link.href = url;
@@ -284,6 +354,11 @@ $('har-file').addEventListener('change', (event) => {
   void loadFile(event.target.files?.[0]);
   event.target.value = '';
 });
+$('compare-file').addEventListener('change', (event) => {
+  void loadComparisonFile(event.target.files?.[0]);
+  event.target.value = '';
+});
+$('load-compare-demo').addEventListener('click', () => { void loadComparisonDemo(); });
 const importCard = $('import-card');
 importCard.addEventListener('dragover', (event) => {
   event.preventDefault();

@@ -4,3 +4,4 @@ coverage/
 *.log
 *.har
 !examples/sample.har
+!examples/optimized.har

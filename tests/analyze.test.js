@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { analyzeHar, evaluateBudgets, formatBytes, formatMs, MAX_ENTRIES, percentile } from '../src/analyze.js';
+import { analyzeHar, compareAnalyses, evaluateBudgets, formatBytes, formatMs, MAX_ENTRIES, percentile } from '../src/analyze.js';
 
 const demo = JSON.parse(readFileSync(new URL('../examples/sample.har', import.meta.url), 'utf8'));
 
@@ -110,4 +110,46 @@ test('formatting stays readable', () => {
   assert.equal(formatBytes(null), 'Unknown');
   assert.equal(formatBytes(1_500), '1.5 KB');
   assert.equal(formatMs(1_500), '1.50 s');
+});
+
+test('comparison reports signed changes without overstating them', () => {
+  const before = analyzeHar({ log: { entries: [one({ time: 100 }), one({ time: 300 })] } });
+  const after = analyzeHar({ log: { entries: [one({ time: 80 })] } });
+  const result = compareAnalyses(before, after);
+  assert.deepEqual(result.rows.find((row) => row.key === 'requestCount'), {
+    key: 'requestCount', label: 'Requests', before: 2, after: 1, delta: -1,
+    percent: -50, comparable: true,
+  });
+  assert.equal(result.rows.find((row) => row.key === 'p95Ms').delta, -220);
+  assert.equal(result.samePrimaryHost, true);
+});
+
+test('unknown transfer on either side prevents a transfer verdict', () => {
+  const known = analyzeHar({ log: { entries: [one()] } });
+  const unknown = analyzeHar({ log: { entries: [one({ response: { status: 200,
+    bodySize: -1, headersSize: -1, content: { mimeType: 'application/json' } } })] } });
+  const comparison = compareAnalyses(known, unknown);
+  assert.equal(comparison.partialTransfer, true);
+  assert.equal(comparison.rows.find((row) => row.key === 'knownTransferBytes').comparable, false);
+});
+
+test('comparison notices different primary hosts and changed resource mix', () => {
+  const before = analyzeHar({ log: { entries: [one()] } });
+  const after = analyzeHar({ log: { entries: [one({ request: {
+    method: 'GET', url: 'https://other.test/image.jpg?private=secret' },
+    response: { status: 200, _transferSize: 400, content: { mimeType: 'image/jpeg' } },
+  })] } });
+  const comparison = compareAnalyses(before, after);
+  assert.equal(comparison.samePrimaryHost, false);
+  assert.deepEqual(comparison.typeChanges.map((row) => [row.type, row.requestDelta]),
+    [['data', -1], ['image', 1]]);
+  assert.ok(!JSON.stringify(comparison).includes('private=secret'));
+});
+
+test('comparison handles a zero baseline and rejects missing analysis', () => {
+  const empty = analyzeHar({ log: { entries: [] } });
+  const populated = analyzeHar({ log: { entries: [one()] } });
+  const comparison = compareAnalyses(empty, populated);
+  assert.equal(comparison.rows[0].percent, null);
+  assert.throws(() => compareAnalyses(null, populated), /Both captures/);
 });

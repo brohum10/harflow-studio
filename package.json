@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/analyze.js && node --check src/app.js && npm test"
+    "check": "node --check src/analyze.js && node --check src/app.js && npm test",
+    "benchmark": "node benchmarks/analyze.mjs"
   },
   "engines": { "node": ">=22" },
   "license": "MIT"

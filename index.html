@@ -68,11 +68,23 @@
         </div>
         <p id="status-message" class="status-message" role="status" aria-live="polite">Loading the synthetic example…</p>
 
-        <section class="metric-grid" aria-label="Capture metrics">
+        <section class="metric-grid" aria-label="Baseline capture metrics">
           <article class="metric-card"><span class="metric-index">01 / VOLUME</span><strong id="metric-requests">—</strong><span class="metric-name">Requests</span><small id="note-requests">Captured entries</small></article>
           <article class="metric-card"><span class="metric-index">02 / WEIGHT</span><strong id="metric-bytes">—</strong><span class="metric-name">Known transfer</span><small id="note-bytes">From recorded wire-size fields</small></article>
           <article class="metric-card"><span class="metric-index">03 / SPEED</span><strong id="metric-p95">—</strong><span class="metric-name">p95 request duration</span><small id="note-p95">Nearest-rank percentile</small></article>
           <article class="metric-card"><span class="metric-index">04 / WINDOW</span><strong id="metric-span">—</strong><span class="metric-name">Capture span</span><small id="note-span">First start to last finish</small></article>
+        </section>
+
+        <section class="panel comparison-panel" aria-labelledby="comparison-title">
+          <div class="comparison-header">
+            <div><span class="overline">BEFORE / AFTER</span><h3 id="comparison-title">Compare a second capture.</h3><p>Use two captures of the same page and conditions. Files stay in this tab; only aggregate, sanitized data is exported.</p></div>
+            <div class="comparison-actions">
+              <input id="compare-file" type="file" accept=".har,.json,application/json" class="sr-only">
+              <label class="button button-outline" for="compare-file">Choose second HAR</label>
+              <button class="button button-outline" id="load-compare-demo" type="button">Try synthetic comparison</button>
+            </div>
+          </div>
+          <div id="comparison-results" class="comparison-results" aria-live="polite"></div>
         </section>
 
         <div class="insight-grid">

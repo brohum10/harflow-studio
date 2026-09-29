@@ -164,6 +164,37 @@ export function evaluateBudgets(metrics, budgets = DEFAULT_BUDGETS) {
   return definitions.map((item) => ({ ...item, passed: item.value <= item.limit }));
 }
 
+export function compareAnalyses(baseline, candidate) {
+  if (!baseline?.metrics || !candidate?.metrics) throw new Error('Both captures must be analyzed first.');
+  const partialTransfer = baseline.metrics.unknownTransfers > 0 || candidate.metrics.unknownTransfers > 0;
+  const fields = [
+    ['requestCount', 'Requests', true],
+    ['knownTransferBytes', 'Known transfer', !partialTransfer],
+    ['p95Ms', 'p95 duration', true],
+    ['loadSpanMs', 'Capture span', true],
+    ['errorCount', 'Error responses', true],
+  ];
+  const rows = fields.map(([key, label, comparable]) => {
+    const before = baseline.metrics[key];
+    const after = candidate.metrics[key];
+    return { key, label, before, after, delta: after - before,
+      percent: before > 0 ? (after - before) / before * 100 : null, comparable };
+  });
+  const beforeTypes = new Map(baseline.types.map((item) => [item.label, item]));
+  const afterTypes = new Map(candidate.types.map((item) => [item.label, item]));
+  const typeChanges = [...new Set([...beforeTypes.keys(), ...afterTypes.keys()])].sort().map((type) => ({
+    type,
+    requestDelta: (afterTypes.get(type)?.count ?? 0) - (beforeTypes.get(type)?.count ?? 0),
+    knownTransferDelta: (afterTypes.get(type)?.transferBytes ?? 0) - (beforeTypes.get(type)?.transferBytes ?? 0),
+  }));
+  return {
+    rows,
+    typeChanges,
+    samePrimaryHost: baseline.metrics.primaryHost === candidate.metrics.primaryHost,
+    partialTransfer,
+  };
+}
+
 export function formatBytes(value) {
   if (value === null || value === undefined) return 'Unknown';
   if (value < 1_000) return `${Math.round(value)} B`;
